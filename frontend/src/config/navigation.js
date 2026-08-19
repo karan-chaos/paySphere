@@ -53,6 +53,7 @@ export const NAV_GROUPS = [
   { id: 'finance', label: 'Finance' },
   { id: 'compliance', label: 'Compliance' },
   { id: 'workplace', label: 'Workplace' },
+  { id: 'lifecycle', label: 'Employee Lifecycle' },
   { id: 'learning', label: 'Learning' },
 ];
 
@@ -260,6 +261,15 @@ export const APP_ROUTES = [
     label: 'Workflows',
     group: 'workplace',
     icon: 'flow',
+  },
+
+  // ── Employee Lifecycle ──────────────────────────────────────────────────
+  {
+    path: '/onboarding-lifecycle',
+    component: lazy(() => import('../pages/lifecycle/OnboardingLifecycleHubPage')),
+    label: 'Onboarding & Lifecycle',
+    group: 'lifecycle',
+    icon: 'userPlus',
   },
 
   // ── Learning ─────────────────────────────────────────────────────────────
