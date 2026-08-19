@@ -53,6 +53,7 @@ export const NAV_GROUPS = [
   { id: 'finance', label: 'Finance' },
   { id: 'compliance', label: 'Compliance' },
   { id: 'workplace', label: 'Workplace' },
+  { id: 'procurement', label: 'Procurement' },
   { id: 'learning', label: 'Learning' },
 ];
 
@@ -260,6 +261,15 @@ export const APP_ROUTES = [
     label: 'Workflows',
     group: 'workplace',
     icon: 'flow',
+  },
+
+  // ── Procurement ─────────────────────────────────────────────────────────
+  {
+    path: '/vendor-procurement',
+    component: lazy(() => import('../pages/procurement/VendorProcurementHubPage')),
+    label: 'Vendor & Procurement',
+    group: 'procurement',
+    icon: 'truck',
   },
 
   // ── Learning ─────────────────────────────────────────────────────────────
