@@ -53,6 +53,7 @@ export const NAV_GROUPS = [
   { id: 'finance', label: 'Finance' },
   { id: 'compliance', label: 'Compliance' },
   { id: 'workplace', label: 'Workplace' },
+  { id: 'audit', label: 'Audit & Forensics' },
   { id: 'learning', label: 'Learning' },
 ];
 
@@ -260,6 +261,15 @@ export const APP_ROUTES = [
     label: 'Workflows',
     group: 'workplace',
     icon: 'flow',
+  },
+
+  // ── Audit & Forensics ───────────────────────────────────────────────────
+  {
+    path: '/audit-forensic',
+    component: lazy(() => import('../pages/audit/AuditForensicHubPage')),
+    label: 'Audit & Forensics',
+    group: 'audit',
+    icon: 'shield',
   },
 
   // ── Learning ─────────────────────────────────────────────────────────────
