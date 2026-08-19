@@ -53,6 +53,7 @@ export const NAV_GROUPS = [
   { id: 'finance', label: 'Finance' },
   { id: 'compliance', label: 'Compliance' },
   { id: 'workplace', label: 'Workplace' },
+  { id: 'fraud-aml', label: 'Fraud & AML' },
   { id: 'learning', label: 'Learning' },
 ];
 
@@ -260,6 +261,22 @@ export const APP_ROUTES = [
     label: 'Workflows',
     group: 'workplace',
     icon: 'flow',
+  },
+
+  // ── Fraud & AML ─────────────────────────────────────────────────────────
+  {
+    path: '/fraud-aml',
+    component: lazy(() => import('../pages/fraud/FraudDetectionAmlHubPage')),
+    label: 'Fraud & AML',
+    group: 'fraud-aml',
+    icon: 'shield',
+  },
+  {
+    path: '/insurance-risk',
+    component: lazy(() => import('../pages/insurance/InsuranceRiskHubPage')),
+    label: 'Insurance & Risk',
+    group: 'fraud-aml',
+    icon: 'shield',
   },
 
   // ── Learning ─────────────────────────────────────────────────────────────
