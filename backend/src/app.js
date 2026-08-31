@@ -383,6 +383,7 @@ const leaveClosureRoutes = require('./routes/leaveClosure.routes');
 const treasuryRoutes = require('./routes/treasury.routes');
 const regionalTaxRoutes = require('./routes/regionalTax.routes');
 const salaryAdjustmentRoutes = require('./routes/salaryAdjustment.routes');
+const salaryRevisionProposalRoutes = require('./routes/salaryRevisionProposal.routes');
 const compensationCycleRoutes = require('./routes/compensationCycle.routes');
 const deferredCompensationRoutes = require('./routes/deferredCompensation.routes');
 const pensionRoutes = require('./routes/pension.routes');
@@ -692,6 +693,7 @@ app.use('/api/loans', loanRoutes);
 app.use('/api/treasury', treasuryRoutes);
 app.use('/api/regional-tax', regionalTaxRoutes);
 app.use('/api/salary-adjustments', salaryAdjustmentRoutes);
+app.use('/api/salary-revision-proposals', salaryRevisionProposalRoutes);
 app.use('/api/compensation-cycles', compensationCycleRoutes);
 // #1876. The router owns `/rules`, `/profiles`, `/registrations`, `/payments`,
 // `/assessment` and `/section-16iii`. It returns one remittance per
