@@ -16,7 +16,8 @@ const Attendance = require('../models/attendance.model');
 const {
   getActiveCalculationRule,
   normalizeCalculationRule,
-} = require('./payrollCalculationRule.service');const { derivePayrollInputs } = require('../utils/attendanceGrid');
+} = require('./payrollCalculationRule.service');
+const { derivePayrollInputs } = require('../utils/attendanceGrid');
 const Loan = require('../models/loan.model');
 const {
   LOAN_STATUS,
@@ -59,10 +60,10 @@ class PayrollEngine {
     currentYear,
     calculationRule = null,
   }) {
-    const resolvedCalculationRule =
-      normalizeCalculationRule(calculationRule);
+    const resolvedCalculationRule = normalizeCalculationRule(calculationRule);
 
-    let leaveDays = 0,      overtimeHours = 0,
+    let leaveDays = 0,
+      overtimeHours = 0,
       bonus = 0,
       deductions = 0;
 
@@ -110,9 +111,8 @@ class PayrollEngine {
     const ledger = attendanceByEmployee.get(String(employee._id));
 
     if (ledger && ledger.totals) {
-      const derived = derivePayrollInputs(ledger.totals);
-      leaveDays = derived.leaveDays;
-      overtimeHours = derived.overtimeHours;
+      leaveDays = ledger.totals.unpaidLeave || 0;
+      overtimeHours = ledger.totals.overtimeHours || 0;
       attendanceSource = 'ledger';
     }
 
@@ -125,23 +125,20 @@ class PayrollEngine {
     const includeTaxableExpenses =
       resolvedCalculationRule.rules.bonus.includeTaxableExpenses !== false;
 
-    const bonusWithTaxableExpenses = Math.round(
-      (bonus + (includeTaxableExpenses ? empExpenses.taxable : 0)) * 100,
-    ) / 100;
+    const bonusWithTaxableExpenses =
+      Math.round(
+        (bonus + (includeTaxableExpenses ? empExpenses.taxable : 0)) * 100,
+      ) / 100;
 
-    const {
-      baseSalary,
-      leaveDeduction,
-      overtimeRate,
-      overtimePay,
-      netSalary,
-    } = calculateNetSalary(employee, user, {
-      leaveDays,
-      overtimeHours,
-      bonus: bonusWithTaxableExpenses,
-      deductions,
-      calculationRule: resolvedCalculationRule,
-    });    if (isNaN(netSalary) || !Number.isFinite(netSalary)) {
+    const { baseSalary, leaveDeduction, overtimeRate, overtimePay, netSalary } =
+      calculateNetSalary(employee, user, {
+        leaveDays,
+        overtimeHours,
+        bonus: bonusWithTaxableExpenses,
+        deductions,
+        calculationRule: resolvedCalculationRule,
+      });
+    if (isNaN(netSalary) || !Number.isFinite(netSalary)) {
       throw new Error(
         `Invalid net salary calculation for employee "${employee.fullName}"`,
       );
@@ -224,7 +221,8 @@ class PayrollEngine {
       arrearsPayout: totalArrears,
       arrearsBreakdown: arrearsBreakdown,
       arrearsLedgerIds: ledgerIds,
-      shortfall: recovery.shortfall,    };
+      shortfall: recovery.shortfall,
+    };
   }
 
   /**
@@ -237,23 +235,24 @@ class PayrollEngine {
       const tenantId = req.tenantId;
       const userId = req.userId;
 
-      let rateDoc = await ExchangeRate.findOne().sort({ date: -1 });
-      if (!rateDoc) {
-        rateDoc = {
-          rates: new Map([
-            ['EUR', 0.92],
-            ['GBP', 0.79],
-            ['INR', 83.5],
-            ['CAD', 1.36],
-            ['AUD', 1.51],
-            ['JPY', 155.2],
-            ['SGD', 1.34],
-            ['USD', 1.0],
-          ]),
-        };
+      const rateDoc = await ExchangeRate.findOne().sort({ date: -1 });
+
+      // Use 48 hours to account for weekends when FX markets are closed
+      const FORTY_EIGHT_HOURS = 48 * 60 * 60 * 1000;
+      if (
+        !rateDoc ||
+        !rateDoc.date ||
+        Date.now() - new Date(rateDoc.date).getTime() > FORTY_EIGHT_HOURS
+      ) {
+        const error = new Error(
+          'Fresh exchange rates are not available (rates are older than 48 hours). Please ensure the exchange rate synchronization job is running before processing payroll.',
+        );
+        error.status = 409;
+        throw error;
       }
 
       const getRateVal = (target) => {
+        console.log('RATEDOC IS: ', rateDoc);
         const targetUpper = (target || 'USD').toUpperCase();
         if (targetUpper === 'USD') return 1.0;
         if (rateDoc && rateDoc.rates) {
@@ -279,7 +278,9 @@ class PayrollEngine {
 
       // Check for unresolved adolescent worker scheduling violations
       const startOfMonth = new Date(Date.UTC(currentYear, currentMonth - 1, 1));
-      const endOfMonth = new Date(Date.UTC(currentYear, currentMonth, 0, 23, 59, 59, 999));
+      const endOfMonth = new Date(
+        Date.UTC(currentYear, currentMonth, 0, 23, 59, 59, 999),
+      );
 
       const unresolvedViolations = await EmploymentFinding.find({
         tenantId,
@@ -289,7 +290,9 @@ class PayrollEngine {
       }).lean();
 
       if (unresolvedViolations.length > 0) {
-        const error = new Error('Adolescent scheduling violations must be resolved before payroll finalization.');
+        const error = new Error(
+          'Adolescent scheduling violations must be resolved before payroll finalization.',
+        );
         error.status = 400;
         throw error;
       }
@@ -303,10 +306,10 @@ class PayrollEngine {
 
       const user = await User.findById(userId);
 
-      const calculationRule =
-        await getActiveCalculationRule(tenantId);
+      const calculationRule = await getActiveCalculationRule(tenantId);
 
-      let attendanceByEmployee = new Map();      try {
+      let attendanceByEmployee = new Map();
+      try {
         const attendanceRecords = await Attendance.find({
           tenantId,
           year: currentYear,
@@ -507,11 +510,31 @@ class PayrollEngine {
         throw conflictError;
       }
 
+      // Multi-tenant PEO Escrow Pre-Flight Check
+      const { checkPayrollFunding } = require('./escrowReconciliation.service');
+      await checkPayrollFunding(tenantId, preparedItems);
+
       try {
         session = await mongoose.startSession();
         session.startTransaction();
       } catch {
         session = null;
+      }
+
+      // Apply retroactive adjustments (Arrears Injector Middleware)
+      const { injectApprovedArrears } = require('./retroCalculator.service');
+      for (const item of preparedItems) {
+        const injected = await injectApprovedArrears(
+          tenantId,
+          item.employee._id,
+          item.netSalary,
+          item.deductions,
+        );
+        item.netSalary = injected.netSalary;
+        item.deductions = injected.deductions;
+        if (injected.arrearsAmount > 0) {
+          item.bonus += injected.arrearsAmount;
+        }
       }
 
       const bulkOps = preparedItems.map((item) => {
@@ -552,13 +575,15 @@ class PayrollEngine {
             version: item.calculationRule.version,
             ruleId: item.calculationRule.ruleId,
             rules: item.calculationRule.rules,
-            employee: {              fullName: item.employee.fullName,
+            employee: {
+              fullName: item.employee.fullName,
               email: item.employee.email,
               role: item.employee.role,
               companyName: item.employee.companyName,
               language: item.employee.language,
               version: item.employee.__v,
-            },            inputs: {
+            },
+            inputs: {
               baseSalary: item.baseSalary,
               overtimeRate: item.overtimeRate,
               leaveDays: item.leaveDays,
@@ -589,7 +614,8 @@ class PayrollEngine {
           },
 
           tenantId,
-          status: PAYROLL_STATUS.PENDING_APPROVAL,          submittedBy: userId,
+          status: PAYROLL_STATUS.PENDING_APPROVAL,
+          submittedBy: userId,
           submittedAt: new Date(),
           approvedBy: null,
           approvedAt: null,
@@ -714,7 +740,8 @@ class PayrollEngine {
         { tenantId, session },
       );
 
-      const results = preparedItems.map((item) => ({        employeeName: item.employee.fullName,
+      const results = preparedItems.map((item) => ({
+        employeeName: item.employee.fullName,
         currency: item.employee.currency || 'INR',
         baseSalary: item.baseSalary,
         leaveDays: item.leaveDays,
@@ -797,6 +824,12 @@ class PayrollEngine {
 
       await cacheService.invalidateAnalytics(userId);
       await cacheService.invalidateDashboardSummary(userId);
+      await cacheService.invalidateTags([
+        'reports',
+        'analytics',
+        'dashboard',
+        'stats:overview',
+      ]);
 
       const resourceIds = results.map((r) => r.payrollId).filter(Boolean);
       eventBus.emit('AUDIT_LOG', {
